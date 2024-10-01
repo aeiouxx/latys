@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache build
+        uses: actions/cache@v2
+        with:
+          path: |
+            build
+          key: ${{ runner.os }}-build-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+      - name: Build
+        run: |
+          mkdir -p build
+          cd build
+          cmake ..
+          make -j2
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Check if CMake is installed
+        id: check-cmake
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          cmake --version
+          if ($?) {
+            echo "CMake is installed."
+            echo "CMAKE_INSTALLED=true" | Out-File -Append -FilePath $env:GITHUB_ENV
+          } else {
+            echo "CMake is not installed."
+            echo "CMAKE_INSTALLED=false" | Out-File -Append -FilePath $env:GITHUB_ENV
+          }
+
+      - name: Install cmake
+        if : env.CMAKE_INSTALLED == 'false'
+        run: |
+          choco install cmake
+
+      - name: Cache build
+        uses: actions/cache@v2
+        with:
+          path: |
+            build
+          key: ${{ runner.os }}-build-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: Create build directory
+        run: |
+          if (-Not (Test-Path "build")) { New-Item -Path "build" -ItemType Directory }       
+
+      - name: Compile application
+        run: |
+          cd build
+          cmake ..
+          cmake --build . --target ALL_BUILD --config Release -- /nologo /verbosity:minimal /maxcpucount
+
+          #  increment_revision:
+          #    needs: build
+          #    runs-on: ubuntu-latest
+          #    if: github.ref == 'refs/heads/main'
+          #    steps:
+          #      - uses: actions/checkout@v2
+          #        with:   
+          #          fetch-depth: 0
+          #
+          #      - name: Increment revision
+          #        id: increment_revision
+          #        run: |
+          #          REVISION=$(cat revision.txt)
+          #          NEW_REVISION=$((REVISION +1))
+          #          echo $NEW_REVISION > revision.txt
+          #          echo "::set-output name=new_revision::$NEW_REVISION
+
+
+
+
